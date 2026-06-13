@@ -1,0 +1,5 @@
+feedparser>=6.0.12
+python-dotenv>=1.2.2
+google-genai>=2.8.0
+google-cloud-texttospeech>=2.34.0
+python-telegram-bot>=22.8
