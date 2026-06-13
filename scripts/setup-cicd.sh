@@ -13,7 +13,9 @@ echo "Runtime SA: ${RUNTIME_SA}"
 for ROLE in \
   roles/run.admin \
   roles/cloudbuild.builds.editor \
-  roles/artifactregistry.writer; do
+  roles/artifactregistry.writer \
+  roles/serviceusage.serviceUsageConsumer \
+  roles/storage.admin; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${DEPLOY_SA}" \
     --role="${ROLE}" \
