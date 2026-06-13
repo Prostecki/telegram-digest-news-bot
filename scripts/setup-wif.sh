@@ -34,9 +34,10 @@ gcloud iam service-accounts create "$SA_NAME" \
   --display-name="GitHub Actions — Telegram Digest Bot" \
   --project="$PROJECT_ID" 2>/dev/null || true
 
+# IAM: Vertex AI + Secret Manager. Cloud TTS has no project-level IAM role —
+# enable texttospeech.googleapis.com (above) and authenticate as this SA.
 for ROLE in \
   roles/aiplatform.user \
-  roles/cloudtexttospeech.user \
   roles/secretmanager.secretAccessor; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${SA_EMAIL}" \
@@ -66,7 +67,7 @@ gcloud iam workload-identity-pools providers create-oidc "$PROVIDER_ID" \
   --attribute-condition="assertion.repository_owner == '${GITHUB_REPO_OWNER}'" \
   --issuer-uri="https://token.actions.githubusercontent.com" 2>/dev/null || true
 
-# Allow this repo to impersonate the SA
+# Allow this repo to impersonate the SA (owner/repo case must match GitHub OIDC claim)
 gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
   --project="$PROJECT_ID" \
   --role="roles/iam.workloadIdentityUser" \
