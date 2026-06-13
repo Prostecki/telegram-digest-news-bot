@@ -23,19 +23,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud (WIF)
+        id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ vars.DIGEST_GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.DIGEST_GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/320517656418/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-digest-bot@athlete-ai-platform.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Load secrets from Secret Manager
-        id: secrets
-        uses: google-github-actions/get-secretmanager-secrets@v2
-        with:
-          export_to_environment: true
-          secrets: |-
-            TELEGRAM_BOT_TOKEN:athlete-ai-platform/digest-telegram-bot-token
-            TELEGRAM_CHAT_ID:athlete-ai-platform/digest-telegram-chat-id
+        run: |
+          echo "TELEGRAM_BOT_TOKEN=$(gcloud secrets versions access latest --secret=digest-telegram-bot-token --project=athlete-ai-platform)" >> "$GITHUB_ENV"
+          echo "TELEGRAM_CHAT_ID=$(gcloud secrets versions access latest --secret=digest-telegram-chat-id --project=athlete-ai-platform)" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -49,7 +49,7 @@ jobs:
 
       - name: Run digest bot
         env:
-          GCP_PROJECT_ID: ${{ vars.DIGEST_GCP_PROJECT_ID }}
-          GCP_LOCATION: ${{ vars.DIGEST_GCP_LOCATION }}
+          GCP_PROJECT_ID: athlete-ai-platform
+          GCP_LOCATION: us-central1
           TTS_LANGUAGE: en-US
         run: python bot.py
