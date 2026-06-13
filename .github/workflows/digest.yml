@@ -30,11 +30,13 @@ jobs:
           service_account: ${{ vars.DIGEST_GCP_SERVICE_ACCOUNT }}
 
       - name: Load secrets from Secret Manager
+        id: secrets
         uses: google-github-actions/get-secretmanager-secrets@v2
         with:
+          export_to_environment: true
           secrets: |-
-            TELEGRAM_BOT_TOKEN:projects/${{ vars.DIGEST_GCP_PROJECT_ID }}/secrets/digest-telegram-bot-token/versions/latest
-            TELEGRAM_CHAT_ID:projects/${{ vars.DIGEST_GCP_PROJECT_ID }}/secrets/digest-telegram-chat-id/versions/latest
+            TELEGRAM_BOT_TOKEN:athlete-ai-platform/digest-telegram-bot-token
+            TELEGRAM_CHAT_ID:athlete-ai-platform/digest-telegram-chat-id
 
       - name: Set up Python
         uses: actions/setup-python@v5
