@@ -26,15 +26,15 @@ jobs:
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DIGEST_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.DIGEST_GCP_SERVICE_ACCOUNT }}
 
       - name: Load secrets from Secret Manager
         uses: google-github-actions/get-secretmanager-secrets@v2
         with:
           secrets: |-
-            TELEGRAM_BOT_TOKEN:projects/${{ vars.GCP_PROJECT_ID }}/secrets/telegram-bot-token/versions/latest
-            TELEGRAM_CHAT_ID:projects/${{ vars.GCP_PROJECT_ID }}/secrets/telegram-chat-id/versions/latest
+            TELEGRAM_BOT_TOKEN:projects/${{ vars.DIGEST_GCP_PROJECT_ID }}/secrets/digest-telegram-bot-token/versions/latest
+            TELEGRAM_CHAT_ID:projects/${{ vars.DIGEST_GCP_PROJECT_ID }}/secrets/digest-telegram-chat-id/versions/latest
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -48,7 +48,7 @@ jobs:
 
       - name: Run digest bot
         env:
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GCP_LOCATION: ${{ vars.GCP_LOCATION }}
+          GCP_PROJECT_ID: ${{ vars.DIGEST_GCP_PROJECT_ID }}
+          GCP_LOCATION: ${{ vars.DIGEST_GCP_LOCATION }}
           TTS_LANGUAGE: en-US
         run: python bot.py

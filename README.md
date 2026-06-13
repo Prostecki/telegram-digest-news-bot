@@ -9,7 +9,7 @@ GitHub Actions (cron / manual)
     ↓ WIF (no JSON keys)
 GCP Service Account
     ↓
-Secret Manager → TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+Secret Manager → digest-telegram-bot-token, digest-telegram-chat-id
 Vertex AI (Gemini) + Cloud TTS
     ↓
 Telegram
@@ -42,18 +42,25 @@ export GCP_PROJECT_ID=athlete-ai-platform
 
 Never commit `.env` — it is gitignored.
 
+Creates secrets with **digest-** prefix (see `scripts/naming.sh`):
+
+| GCP Secret Manager | App env var (injected in CI) |
+|---|---|
+| `digest-telegram-bot-token` | `TELEGRAM_BOT_TOKEN` |
+| `digest-telegram-chat-id` | `TELEGRAM_CHAT_ID` |
+
 ### 3. GitHub repository variables
 
-In **Settings → Secrets and variables → Actions → Variables**, add:
+In **Settings → Secrets and variables → Actions → Variables**, add (**DIGEST_** prefix — no clash with other repos/projects):
 
 | Variable | Example |
 |---|---|
-| `GCP_PROJECT_ID` | `athlete-ai-platform` |
-| `GCP_LOCATION` | `us-central1` |
-| `GCP_SERVICE_ACCOUNT` | `github-digest-bot@athlete-ai-platform.iam.gserviceaccount.com` |
-| `GCP_WIF_PROVIDER` | `projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
+| `DIGEST_GCP_PROJECT_ID` | `athlete-ai-platform` |
+| `DIGEST_GCP_LOCATION` | `us-central1` |
+| `DIGEST_GCP_SERVICE_ACCOUNT` | `github-digest-bot@athlete-ai-platform.iam.gserviceaccount.com` |
+| `DIGEST_GCP_WIF_PROVIDER` | `projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
 
-Telegram token and chat ID stay in **GCP Secret Manager**, not in GitHub.
+Telegram credentials live only in **GCP Secret Manager** (`digest-*`), not in GitHub Secrets.
 
 ### 4. Push and run CI
 

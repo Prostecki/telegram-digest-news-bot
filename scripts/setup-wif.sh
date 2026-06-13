@@ -3,6 +3,10 @@
 # Usage: ./scripts/setup-wif.sh <GITHUB_ORG_OR_USER> <REPO_NAME>
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=naming.sh
+source "${SCRIPT_DIR}/naming.sh"
+
 GITHUB_REPO_OWNER="${1:?GitHub org or user, e.g. marktaratynov}"
 GITHUB_REPO_NAME="${2:?Repo name, e.g. telegram-digest-bot}"
 PROJECT_ID="${GCP_PROJECT_ID:-athlete-ai-platform}"
@@ -71,14 +75,12 @@ gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
 WIF_PROVIDER="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
 
 echo ""
-echo "=== Add these GitHub repository VARIABLES (Settings → Secrets and variables → Actions → Variables) ==="
-echo "GCP_PROJECT_ID=${PROJECT_ID}"
-echo "GCP_LOCATION=us-central1"
-echo "GCP_SERVICE_ACCOUNT=${SA_EMAIL}"
-echo "GCP_WIF_PROVIDER=${WIF_PROVIDER}"
+echo "=== GitHub repository VARIABLES (Settings → Actions → Variables) ==="
+echo "${GH_VAR_PROJECT_ID}=${PROJECT_ID}"
+echo "${GH_VAR_LOCATION}=us-central1"
+echo "${GH_VAR_SERVICE_ACCOUNT}=${SA_EMAIL}"
+echo "${GH_VAR_WIF_PROVIDER}=${WIF_PROVIDER}"
 echo ""
-echo "=== Create secrets in Secret Manager ==="
-echo "gcloud secrets create telegram-bot-token --project=${PROJECT_ID}"
-echo "echo -n 'YOUR_TOKEN' | gcloud secrets versions add telegram-bot-token --data-file=- --project=${PROJECT_ID}"
-echo "gcloud secrets create telegram-chat-id --project=${PROJECT_ID}"
-echo "echo -n 'YOUR_CHAT_ID' | gcloud secrets versions add telegram-chat-id --data-file=- --project=${PROJECT_ID}"
+echo "=== GCP Secret Manager (run ./scripts/create-secrets.sh) ==="
+echo "${SM_TELEGRAM_BOT_TOKEN}"
+echo "${SM_TELEGRAM_CHAT_ID}"

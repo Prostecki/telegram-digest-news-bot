@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Store Telegram credentials in GCP Secret Manager.
-# Reads from .env if present, otherwise pass as env vars.
+# Store digest-bot credentials in GCP Secret Manager (digest-* names).
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=naming.sh
+source "${SCRIPT_DIR}/naming.sh"
 
 PROJECT_ID="${GCP_PROJECT_ID:-athlete-ai-platform}"
 
@@ -27,7 +30,12 @@ create_or_update() {
   fi
 }
 
-create_or_update "telegram-bot-token" "$TELEGRAM_BOT_TOKEN"
-create_or_update "telegram-chat-id" "$TELEGRAM_CHAT_ID"
+echo "Project: ${PROJECT_ID}"
+echo "Secret names: ${SM_TELEGRAM_BOT_TOKEN}, ${SM_TELEGRAM_CHAT_ID}"
+echo ""
 
-echo "Done. Secrets stored in project ${PROJECT_ID}."
+create_or_update "$SM_TELEGRAM_BOT_TOKEN" "$TELEGRAM_BOT_TOKEN"
+create_or_update "$SM_TELEGRAM_CHAT_ID" "$TELEGRAM_CHAT_ID"
+
+echo ""
+echo "Done. GitHub Actions reads these via workflow digest.yml."
