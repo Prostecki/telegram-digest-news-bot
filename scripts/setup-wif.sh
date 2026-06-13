@@ -67,7 +67,8 @@ gcloud iam workload-identity-pools providers create-oidc "$PROVIDER_ID" \
   --attribute-condition="assertion.repository_owner == '${GITHUB_REPO_OWNER}'" \
   --issuer-uri="https://token.actions.githubusercontent.com" 2>/dev/null || true
 
-# Allow this repo to impersonate the SA (owner/repo case must match GitHub OIDC claim)
+# Allow this repo to impersonate the SA.
+# Use the exact owner/repo from GitHub (Settings → General → Repository name).
 gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
   --project="$PROJECT_ID" \
   --role="roles/iam.workloadIdentityUser" \
