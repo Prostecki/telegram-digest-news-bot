@@ -1,7 +1,7 @@
-from digest.config import AUDIO_TARGET_WORDS, TOP_STORIES_COUNT
+from digest.models import TopStory
 
 
-def build_podcast_script(top_stories: list[dict]) -> str:
+def build_podcast_script(top_stories: list[TopStory]) -> str:
     """Assemble TTS text from explicit per-story English segments."""
     if not top_stories:
         return "No top stories today. Check Telegram for the full reading list."
@@ -13,16 +13,13 @@ def build_podcast_script(top_stories: list[dict]) -> str:
     parts = [intro]
 
     for i, story in enumerate(top_stories, start=1):
-        segment = story.get("audio_segment", "").strip()
+        segment = story.audio_segment.strip()
         if segment:
             parts.append(segment)
             continue
-
-        title = story.get("title", "this story")
-        source = story.get("source", "the web")
-        why = story.get("why_it_matters", "")
         parts.append(
-            f"Story {i}, from {source}: {title}. {why}"
+            f"Story {i}, from {story.article.source}: "
+            f"{story.article.title}. {story.why_it_matters}"
         )
 
     parts.append(

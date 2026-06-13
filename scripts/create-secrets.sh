@@ -38,4 +38,4 @@ create_or_update "$SM_TELEGRAM_BOT_TOKEN" "$TELEGRAM_BOT_TOKEN"
 create_or_update "$SM_TELEGRAM_CHAT_ID" "$TELEGRAM_CHAT_ID"
 
 echo ""
-echo "Done. GitHub Actions reads these via workflow digest.yml."
+echo "Done. Cloud Run reads these via deploy-cloudrun.sh."

@@ -1,5 +1,6 @@
-feedparser>=6.0.12
-python-dotenv>=1.2.2
-google-genai>=2.8.0
-google-cloud-texttospeech>=2.34.0
-python-telegram-bot>=22.8
+feedparser>=6.0.12,<7
+python-dotenv>=1.2.2,<2
+google-genai>=2.8.0,<3
+google-cloud-texttospeech>=2.34.0,<3
+python-telegram-bot[webhooks]>=22.8,<23
+tenacity>=9.0.0,<10

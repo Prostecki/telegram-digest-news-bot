@@ -1,18 +1,30 @@
+import logging
 import re
+import socket
+from concurrent.futures import ThreadPoolExecutor
 from html import unescape
+from urllib.error import URLError
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import feedparser
 
 from digest.config import (
     ENTRIES_PER_SOURCE,
+    FETCH_TIMEOUT,
     HABR_PREFIX,
     INTEREST_KEYWORDS,
     MAX_ARTICLES,
+    MAX_FETCH_WORKERS,
     MIN_RELEVANT_ARTICLES,
     RSS_SOURCES,
     SNIPPET_MAX_LENGTH,
 )
+from digest.models import Article
+
+logger = logging.getLogger(__name__)
+
+USER_AGENT = "telegram-digest-bot/1.0 (+https://github.com)"
 
 
 def source_label(feed_url: str) -> str:
@@ -48,34 +60,52 @@ def is_relevant(article: dict, feed_url: str) -> bool:
     return any(keyword in text for keyword in INTEREST_KEYWORDS)
 
 
-def fetch_news() -> list[dict]:
+def _fetch_feed(feed_url: str) -> list[dict]:
+    try:
+        request = Request(feed_url, headers={"User-Agent": USER_AGENT})
+        with urlopen(request, timeout=FETCH_TIMEOUT) as response:
+            raw = response.read()
+    except (URLError, socket.timeout, ValueError) as error:
+        logger.warning("Failed to fetch %s: %s", feed_url, error)
+        return []
+
+    feed = feedparser.parse(raw)
+    if feed.bozo:
+        logger.warning("Malformed feed %s: %s", feed_url, feed.bozo_exception)
+
+    source = source_label(feed_url)
+    items: list[dict] = []
+    for entry in feed.entries[:ENTRIES_PER_SOURCE]:
+        title = (getattr(entry, "title", "") or "").strip()
+        if not title:
+            continue
+        snippet = clean_snippet(getattr(entry, "summary", ""))
+        items.append({
+            "title": title,
+            "link": (getattr(entry, "link", "") or "").strip(),
+            "source": source,
+            "snippet": snippet,
+            "lang": article_lang(source, title, snippet),
+            "_feed_url": feed_url,
+        })
+    return items
+
+
+def fetch_news() -> list[Article]:
+    with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as executor:
+        per_feed = executor.map(_fetch_feed, RSS_SOURCES)
+
     items: list[dict] = []
     seen: set[str] = set()
-
-    for feed_url in RSS_SOURCES:
-        feed = feedparser.parse(feed_url)
-        source = source_label(feed_url)
-
-        for entry in feed.entries[:ENTRIES_PER_SOURCE]:
-            title = entry.title.strip()
-            if not title or title in seen:
+    for feed_items in per_feed:
+        for item in feed_items:
+            if item["title"] in seen:
                 continue
-
-            seen.add(title)
-            snippet = clean_snippet(getattr(entry, "summary", ""))
-            items.append({
-                "title": title,
-                "link": getattr(entry, "link", "").strip(),
-                "source": source,
-                "snippet": snippet,
-                "lang": article_lang(source, title, snippet),
-                "_feed_url": feed_url,
-            })
+            seen.add(item["title"])
+            items.append(item)
 
     relevant = [a for a in items if is_relevant(a, a["_feed_url"])]
-    articles = relevant if len(relevant) >= MIN_RELEVANT_ARTICLES else items
+    chosen = relevant if len(relevant) >= MIN_RELEVANT_ARTICLES else items
 
-    return [
-        {k: v for k, v in article.items() if k != "_feed_url"}
-        for article in articles[:MAX_ARTICLES]
-    ]
+    logger.info("Fetched %d articles (%d relevant)", len(items), len(relevant))
+    return [Article.from_dict(item) for item in chosen[:MAX_ARTICLES]]
