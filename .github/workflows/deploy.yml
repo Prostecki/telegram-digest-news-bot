@@ -55,7 +55,22 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Build image
-        run: gcloud builds submit --tag "${IMAGE}" --project "${PROJECT_ID}"
+        run: |
+          BUILD_ID="$(gcloud builds submit --tag "${IMAGE}" --project "${PROJECT_ID}" --async --format='value(id)')"
+          echo "Cloud Build ID: ${BUILD_ID}"
+          echo "Logs: https://console.cloud.google.com/cloud-build/builds/${BUILD_ID}?project=${PROJECT_ID}"
+          while true; do
+            STATUS="$(gcloud builds describe "${BUILD_ID}" --project "${PROJECT_ID}" --format='value(status)')"
+            echo "Build status: ${STATUS}"
+            case "${STATUS}" in
+              SUCCESS) break ;;
+              FAILURE|CANCELLED|TIMEOUT|EXPIRED|INTERNAL_ERROR)
+                echo "Cloud Build failed: ${STATUS}"
+                exit 1
+                ;;
+              *) sleep 5 ;;
+            esac
+          done
 
       - name: Deploy new revision
         run: |
