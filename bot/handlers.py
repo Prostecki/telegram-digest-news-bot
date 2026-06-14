@@ -68,7 +68,7 @@ def _save_digest_file(digest: Digest) -> None:
 
 async def deliver_digest(bot, chat_id: int) -> None:
     logger.info("Generating digest for chat %s", chat_id)
-    digest = await asyncio.to_thread(run_digest)
+    digest = await asyncio.wait_for(asyncio.to_thread(run_digest), timeout=300)
     messages = format_telegram_messages(digest)
     validate_telegram_messages(messages)
     markdown = format_digest_markdown(digest)
@@ -78,7 +78,7 @@ async def deliver_digest(bot, chat_id: int) -> None:
     audio_text = digest.audio_script or digest.summary
     if not audio_text.strip():
         raise TelegramDeliveryError("Audio script is empty")
-    audio_bytes = await asyncio.to_thread(synthesize_speech, audio_text, TTS_LANGUAGE)
+    audio_bytes = await asyncio.wait_for(asyncio.to_thread(synthesize_speech, audio_text, TTS_LANGUAGE), timeout=60)
     if not audio_bytes:
         raise TelegramDeliveryError("TTS returned empty audio")
 
@@ -146,6 +146,12 @@ async def _run_digest_job(application: Application, chat_id: int) -> None:
         await application.bot.send_message(
             chat_id=chat_id,
             text=f"❌ Failed to prepare digest: {exc}",
+        )
+    except TimeoutError:
+        logger.exception("Digest timed out for chat %s", chat_id)
+        await application.bot.send_message(
+            chat_id=chat_id,
+            text="❌ Digest timed out (Gemini or TTS took too long). Try again.",
         )
     except RuntimeError as exc:
         logger.exception("Digest generation failed for chat %s", chat_id)
