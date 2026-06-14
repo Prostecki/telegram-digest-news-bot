@@ -1,4 +1,26 @@
-from tts import _pick_voice, _split_for_tts
+import subprocess
+from pathlib import Path
+
+from tts import _merge_mp3, _pick_voice, _split_for_tts
+
+
+def test_merge_mp3_single_part():
+    data = b"fake-mp3"
+    assert _merge_mp3([data]) == data
+
+
+def test_merge_mp3_uses_ffmpeg(monkeypatch):
+    monkeypatch.setattr("tts.shutil.which", lambda _: "/usr/bin/ffmpeg")
+
+    def fake_run(cmd, capture_output=True, check=False):
+        Path(cmd[-1]).write_bytes(b"merged-mp3")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr("tts.subprocess.run", fake_run)
+
+    result = _merge_mp3([b"part-a", b"part-b"])
+
+    assert result == b"merged-mp3"
 
 
 def test_short_text_single_chunk():

@@ -5,6 +5,10 @@ from bot.config import CATEGORY_EMOJI, MAX_MESSAGE_LENGTH, OPTION_LABELS
 from digest.models import Article, Category, Digest, Question, TopStory
 
 
+class TelegramDeliveryError(Exception):
+    """Digest content cannot be delivered within Telegram limits."""
+
+
 def digest_filename(date: str | None = None) -> str:
     date = date or datetime.now().strftime("%d-%m-%Y")
     return f"{date}-digest.md"
@@ -124,6 +128,24 @@ def format_digest_markdown(digest: Digest) -> str:
     return "\n".join(lines)
 
 
+def _split_long_line(line: str, max_len: int) -> list[str]:
+    if len(line) <= max_len:
+        return [line]
+
+    chunks: list[str] = []
+    rest = line
+    while rest:
+        if len(rest) <= max_len:
+            chunks.append(rest)
+            break
+        cut = rest.rfind(" ", 0, max_len + 1)
+        if cut <= 0:
+            cut = max_len
+        chunks.append(rest[:cut].rstrip())
+        rest = rest[cut:].lstrip()
+    return chunks
+
+
 def _split_text(text: str, max_len: int) -> list[str]:
     if len(text) <= max_len:
         return [text]
@@ -131,14 +153,39 @@ def _split_text(text: str, max_len: int) -> list[str]:
     chunks: list[str] = []
     current = ""
     for line in text.splitlines(keepends=True):
-        if len(current) + len(line) > max_len and current:
+        body = line.rstrip("\n")
+        newline = "\n" if line.endswith("\n") else ""
+
+        if len(body) > max_len:
+            if current.strip():
+                chunks.append(current.rstrip())
+                current = ""
+            chunks.extend(_split_long_line(body, max_len))
+            if newline and chunks:
+                chunks[-1] += newline
+            continue
+
+        piece = body + newline
+        if len(current) + len(piece) > max_len and current:
             chunks.append(current.rstrip())
-            current = line
+            current = piece
         else:
-            current += line
+            current += piece
+
     if current.strip():
         chunks.append(current.rstrip())
     return chunks
+
+
+def validate_telegram_messages(
+    messages: list[str],
+    max_len: int = MAX_MESSAGE_LENGTH,
+) -> None:
+    for index, message in enumerate(messages, start=1):
+        if len(message) > max_len:
+            raise TelegramDeliveryError(
+                f"Message part {index} is {len(message)} chars (Telegram limit {max_len})"
+            )
 
 
 def _category_articles_count(categories: list[Category]) -> int:
@@ -183,7 +230,8 @@ def format_telegram_messages(digest: Digest) -> list[str]:
         block.append(f"   <tg-spoiler>✅ {_answer_label(question.correct)}</tg-spoiler>")
         quiz_lines.append("\n".join(block))
 
-    messages = [header]
+    messages: list[str] = []
+    messages.extend(_split_text(header, MAX_MESSAGE_LENGTH))
     messages.extend(_split_text("\n".join(top_lines), MAX_MESSAGE_LENGTH))
     messages.extend(_split_text("\n".join(read_lines), MAX_MESSAGE_LENGTH))
     messages.extend(_split_text("\n".join(quiz_lines), MAX_MESSAGE_LENGTH))

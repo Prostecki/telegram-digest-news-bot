@@ -15,9 +15,11 @@ from bot.config import (
     TTS_LANGUAGE,
 )
 from bot.formatters import (
+    TelegramDeliveryError,
     digest_filename,
     format_digest_markdown,
     format_telegram_messages,
+    validate_telegram_messages,
 )
 from digest import Digest, run_digest
 from tts import synthesize_speech
@@ -26,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 _digest_lock = asyncio.Lock()
 _last_digest_at: datetime | None = None
+_digest_running = False
 
 
 def _is_allowed_chat(chat_id: int) -> bool:
@@ -67,13 +70,19 @@ async def deliver_digest(bot, chat_id: int) -> None:
     logger.info("Generating digest for chat %s", chat_id)
     digest = await asyncio.to_thread(run_digest)
     messages = format_telegram_messages(digest)
+    validate_telegram_messages(messages)
     markdown = format_digest_markdown(digest)
     filename = digest_filename(digest.date)
-    _save_digest_file(digest)
 
     logger.info("Synthesizing audio")
     audio_text = digest.audio_script or digest.summary
+    if not audio_text.strip():
+        raise TelegramDeliveryError("Audio script is empty")
     audio_bytes = await asyncio.to_thread(synthesize_speech, audio_text, TTS_LANGUAGE)
+    if not audio_bytes:
+        raise TelegramDeliveryError("TTS returned empty audio")
+
+    _save_digest_file(digest)
 
     await bot.send_message(
         chat_id=chat_id,
@@ -111,19 +120,49 @@ async def deliver_digest(bot, chat_id: int) -> None:
     logger.info("Digest sent to chat %s", chat_id)
 
 
-async def _run_digest_job(application: Application, chat_id: int) -> None:
-    global _last_digest_at
+async def _try_start_digest() -> str | None:
+    """Reserve a digest slot under lock. Returns error text or None if allowed."""
+    global _digest_running
 
     async with _digest_lock:
-        _last_digest_at = datetime.now()
-        try:
-            await deliver_digest(application.bot, chat_id)
-        except Exception:
-            logger.exception("Digest failed for chat %s", chat_id)
-            await application.bot.send_message(
-                chat_id=chat_id,
-                text="❌ Failed to generate digest. Check Cloud Run logs.",
-            )
+        if _digest_running:
+            return "⏳ Digest is already running. Please wait."
+        remaining = _cooldown_remaining()
+        if remaining is not None:
+            return f"⏳ Next digest available in {_format_cooldown(remaining)}."
+        _digest_running = True
+        return None
+
+
+async def _run_digest_job(application: Application, chat_id: int) -> None:
+    global _last_digest_at, _digest_running
+
+    try:
+        await deliver_digest(application.bot, chat_id)
+        async with _digest_lock:
+            _last_digest_at = datetime.now()
+    except TelegramDeliveryError as exc:
+        logger.exception("Digest delivery validation failed for chat %s", chat_id)
+        await application.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ Failed to prepare digest: {exc}",
+        )
+    except RuntimeError as exc:
+        logger.exception("Digest generation failed for chat %s", chat_id)
+        if "No articles" in str(exc):
+            text = "❌ No news articles fetched from RSS. Try again later."
+        else:
+            text = f"❌ Digest generation failed: {exc}"
+        await application.bot.send_message(chat_id=chat_id, text=text)
+    except Exception:
+        logger.exception("Digest failed for chat %s", chat_id)
+        await application.bot.send_message(
+            chat_id=chat_id,
+            text="❌ Failed to send digest to Telegram. Check Cloud Run logs.",
+        )
+    finally:
+        async with _digest_lock:
+            _digest_running = False
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -150,15 +189,9 @@ async def getnews_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("⛔ This bot is private.")
         return
 
-    if _digest_lock.locked():
-        await update.message.reply_text("⏳ Digest is already running. Please wait.")
-        return
-
-    remaining = _cooldown_remaining()
-    if remaining is not None:
-        await update.message.reply_text(
-            f"⏳ Next digest available in {_format_cooldown(remaining)}."
-        )
+    blocked = await _try_start_digest()
+    if blocked:
+        await update.message.reply_text(blocked)
         return
 
     await update.message.reply_text("⏳ Generating digest… This takes 2–5 minutes.")

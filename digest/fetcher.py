@@ -91,6 +91,13 @@ def _fetch_feed(feed_url: str) -> list[dict]:
     return items
 
 
+def _dedup_key(item: dict) -> str:
+    link = item.get("link", "").strip().rstrip("/").lower()
+    if link:
+        return f"link:{link}"
+    return f"title:{item['title'].strip().lower()}"
+
+
 def fetch_news() -> list[Article]:
     with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as executor:
         per_feed = executor.map(_fetch_feed, RSS_SOURCES)
@@ -99,9 +106,10 @@ def fetch_news() -> list[Article]:
     seen: set[str] = set()
     for feed_items in per_feed:
         for item in feed_items:
-            if item["title"] in seen:
+            key = _dedup_key(item)
+            if key in seen:
                 continue
-            seen.add(item["title"])
+            seen.add(key)
             items.append(item)
 
     relevant = [a for a in items if is_relevant(a, a["_feed_url"])]

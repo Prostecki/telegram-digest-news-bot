@@ -24,6 +24,8 @@ env:
   PROJECT_ID: athlete-ai-platform
   REGION: us-central1
   SERVICE: digest-bot
+  RUNTIME_SA: digest-bot@athlete-ai-platform.iam.gserviceaccount.com
+  COOLDOWN_HOURS: "4"
   IMAGE: us-central1-docker.pkg.dev/athlete-ai-platform/digest-bot/app:${{ github.sha }}
 
 jobs:
@@ -74,7 +76,50 @@ jobs:
 
       - name: Deploy new revision
         run: |
-          gcloud run deploy "${SERVICE}" \
-            --image "${IMAGE}" \
+          SERVICE_URL="$(gcloud run services describe "${SERVICE}" \
             --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(status.url)' 2>/dev/null || true)"
+
+          SECRETS="TELEGRAM_BOT_TOKEN=digest-telegram-bot-token:latest"
+          SECRETS+=",TELEGRAM_CHAT_ID=digest-telegram-chat-id:latest"
+          SECRETS+=",WEBHOOK_SECRET=digest-webhook-secret:latest"
+
+          DEPLOY_ARGS=(
+            --image "${IMAGE}"
+            --project "${PROJECT_ID}"
             --region "${REGION}"
+            --service-account "${RUNTIME_SA}"
+            --set-secrets="${SECRETS}"
+            --allow-unauthenticated
+            --no-cpu-throttling
+            --timeout=900
+            --memory=1Gi
+            --min-instances=0
+            --max-instances=1
+            --port=8080
+          )
+
+          deploy_revision() {
+            local env_vars="$1"
+            gcloud run deploy "${SERVICE}" \
+              "${DEPLOY_ARGS[@]}" \
+              --set-env-vars="${env_vars}"
+          }
+
+          BASE_ENV="GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${REGION},DIGEST_COOLDOWN_HOURS=${COOLDOWN_HOURS}"
+          if [[ -n "${SERVICE_URL}" ]]; then
+            echo "Using service URL: ${SERVICE_URL}"
+            deploy_revision "${BASE_ENV},WEBHOOK_URL=${SERVICE_URL}"
+          else
+            echo "First deploy: enabling webhook after service URL is assigned"
+            deploy_revision "${BASE_ENV}"
+            SERVICE_URL="$(gcloud run services describe "${SERVICE}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format='value(status.url)')"
+            deploy_revision "${BASE_ENV},WEBHOOK_URL=${SERVICE_URL}"
+          fi
+
+          echo "Deployed: ${SERVICE_URL}"
+          echo "Telegram webhook: ${SERVICE_URL}/webhook"

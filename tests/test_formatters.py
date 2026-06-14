@@ -1,8 +1,13 @@
+import pytest
+
 from bot.formatters import (
+    TelegramDeliveryError,
+    _split_long_line,
     _split_text,
     digest_filename,
     format_digest_markdown,
     format_telegram_messages,
+    validate_telegram_messages,
 )
 from digest.models import Article, Category, Digest, Question, TopStory
 
@@ -35,6 +40,50 @@ def test_split_text_splits_long():
     chunks = _split_text(text, 50)
     assert len(chunks) > 1
     assert all(len(c) <= 50 for c in chunks)
+
+
+def test_split_long_line_splits_without_spaces():
+    chunks = _split_long_line("a" * 120, 50)
+    assert len(chunks) == 3
+    assert all(len(c) <= 50 for c in chunks)
+    assert "".join(chunks) == "a" * 120
+
+
+def test_split_text_splits_single_long_line():
+    line = "news " * 900
+    chunks = _split_text(line.strip(), 100)
+    assert len(chunks) > 1
+    assert all(len(c) <= 100 for c in chunks)
+
+
+def test_format_telegram_messages_within_limit():
+    long_text = "Insight " * 800
+    article = Article(title="Title", link="https://a", source="dev.to", snippet="snip")
+    digest = Digest(
+        date="13-06-2026",
+        summary="Summary",
+        top_stories=[
+            TopStory(
+                article=article,
+                why_it_matters="why",
+                deep_dive=long_text,
+                audio_segment="seg",
+            )
+        ],
+        categories=[Category(name="AI & Agents", articles=[article])],
+        questions=[Question(question="Q?", options=["a", "b", "c", "d"], correct=0)],
+        audio_script="one two three",
+        articles=[article],
+    )
+
+    messages = format_telegram_messages(digest)
+    validate_telegram_messages(messages)
+    assert all(len(message) <= 4096 for message in messages)
+
+
+def test_validate_telegram_messages_raises():
+    with pytest.raises(TelegramDeliveryError, match="Message part 1"):
+        validate_telegram_messages(["x" * 5000])
 
 
 def test_telegram_messages_escape_html():

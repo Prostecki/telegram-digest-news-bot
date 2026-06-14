@@ -1,6 +1,10 @@
 import logging
 import os
 import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
 from dotenv import load_dotenv
 from google.cloud import texttospeech
@@ -91,6 +95,49 @@ def _synthesize_chunk(chunk: str, language_code: str, voice_name: str) -> bytes:
     return response.audio_content
 
 
+def _merge_mp3(audio_parts: list[bytes]) -> bytes:
+    if len(audio_parts) == 1:
+        return audio_parts[0]
+    if shutil.which("ffmpeg") is None:
+        logger.warning("ffmpeg not found, falling back to byte concat for MP3")
+        return b"".join(audio_parts)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        list_lines: list[str] = []
+        for index, part in enumerate(audio_parts):
+            part_path = tmp_path / f"part_{index}.mp3"
+            part_path.write_bytes(part)
+            list_lines.append(f"file '{part_path}'")
+
+        list_path = tmp_path / "list.txt"
+        list_path.write_text("\n".join(list_lines), encoding="utf-8")
+        output_path = tmp_path / "merged.mp3"
+
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(list_path),
+                "-c",
+                "copy",
+                str(output_path),
+            ],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace")[:300]
+            logger.warning("ffmpeg merge failed (%s), falling back to byte concat", stderr)
+            return b"".join(audio_parts)
+        return output_path.read_bytes()
+
+
 def synthesize_speech(text: str, language_code: str = "en-US") -> bytes:
     voice_name = _pick_voice(language_code)
     chunks = _split_for_tts(text)
@@ -98,4 +145,4 @@ def synthesize_speech(text: str, language_code: str = "en-US") -> bytes:
     audio_parts = [
         _synthesize_chunk(chunk, language_code, voice_name) for chunk in chunks
     ]
-    return b"".join(audio_parts)
+    return _merge_mp3(audio_parts)

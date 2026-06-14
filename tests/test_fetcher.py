@@ -1,4 +1,4 @@
-from digest.fetcher import article_lang, clean_snippet, is_relevant, source_label
+from digest.fetcher import _dedup_key, article_lang, clean_snippet, is_relevant, source_label
 
 
 def test_source_label_habr():
@@ -54,3 +54,14 @@ def test_is_relevant_matches_keyword():
 def test_is_relevant_no_keyword():
     article = {"title": "Gardening tips for spring", "snippet": "flowers"}
     assert is_relevant(article, "https://dev.to/feed") is False
+
+
+def test_dedup_key_prefers_link():
+    item = {"title": "Title A", "link": "https://example.com/post/"}
+    assert _dedup_key(item) == "link:https://example.com/post"
+
+
+def test_dedup_key_falls_back_to_title():
+    item = {"title": "Title A", "link": ""}
+    assert _dedup_key(item) == "title:title a"
+
